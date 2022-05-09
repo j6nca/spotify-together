@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>spotify-party</h1>
+    <!-- Input fields for joining a room -->
+    <button id = 'create'>Create Room</button><br>
+    <input type="text" id = 'joinId'></input>
+    <button id = 'join'>Join Room</button>
+    <!-- Input fields within a room -->
+    <!-- 
+        Play/Pause
+        Skip
+        Add to Queue
+    -->
+    <input type="text" id = 'addId'></input>
+    <button id = 'add'>Add to Queue</button>
+    <div id="divplay">
+        <button id = 'play'>Play</button>
+    </div>
+    <!-- UI within room -->
+    <h2>Users</h2>
+    <div id="users"></div>
+    <h2>Song Queue</h2>
+    <div id="queue"></div>
+    <!-- <div id="spotify-player">
+        <iframe style="border-radius:12px" src="https://open.spotify.com/embed/track/6dGnYIeXmHdcikdzNNDMm2?utm_source=generator" width="100%" height="380" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+    </div> -->
+
+    <!-- Privacy Disclaimer -->
+    <p>Disclaimer: We don't keep any data</p>
+    <script>
+        let clientId = null;
+        let roomId = null;
+        let ws = new WebSocket("ws://localhost:9090")
+
+        // HTML elements
+        const create = document.getElementById("create")
+        const join = document.getElementById("join")
+        const joinId = document.getElementById("joinId")
+
+        const add= document.getElementById("add")
+        const addId = document.getElementById("addId")
+
+        const play = document.getElementById("play")
+        // Create payload
+        create.addEventListener("click", e =>{
+            const payLoad = {
+                "method": "create",
+                "clientId": clientId
+            }
+            ws.send(JSON.stringify(payLoad));
+        })
+
+        // Join payload
+        join.addEventListener("click", e =>{
+            if(roomId === null){
+                roomId = joinId.value
+                console.log("User entered ", roomId)
+            }
+            const payLoad = {
+                "method": "join",
+                "clientId": clientId,
+                "roomId": roomId
+            }
+            ws.send(JSON.stringify(payLoad));
+        })
+
+        // Add payload
+        add.addEventListener("click", e =>{
+            const payLoad = {
+                "method": "add",
+                "clientId": clientId,
+                "roomId": roomId,
+                "songId": addId.value
+            }
+            ws.send(JSON.stringify(payLoad));
+        })
+
+
+        // Play payload
+        play.addEventListener("click", e =>{
+            const payLoad = {
+                "method": "play",
+                "clientId": clientId,
+                "roomId": roomId,
+            }
+            ws.send(JSON.stringify(payLoad));
+        })
+        
+        // Handle server messages
+        ws.onmessage = message => {
+            const response = JSON.parse(message.data);
+            console.log(response);
+
+            if(response.method === "connect"){
+                clientId = response.clientId;
+                console.log("Client Id set successfully ", clientId)
+            }
+
+            if(response.method === "create"){
+                roomId = response.room.id
+                console.log("Game successfully created with id  ", response.room.id)
+            }
+
+            if(response.method === "join"){
+                const room = response.room;
+                while(users.firstChild){
+                    users.removeChild(users.firstChild)
+                }
+                room.clients.forEach(c =>{
+                    const d = document.createElement("div");
+                    d.textContent = c.clientId;
+                    users.appendChild(d)
+                })
+                console.log("User " + response.newUser + " joined room id " + response.room.id)
+            }
+
+            if(response.method === "join" || response.method === "add"){
+                const room = response.room;
+                while(queue.firstChild){
+                    queue.removeChild(queue.firstChild)
+                }
+                room.queue.forEach(s =>{
+                    const d = document.createElement("div");
+                    d.textContent = s.songId;
+                    queue.appendChild(d)
+                })
+
+                if(response.method === "add"){
+                    console.log("User " + response.result.clientId + " added song " + response.result.songId + " to room " + response.room.id)
+                }
+                
+            }
+
+            if(response.method === "play"){
+                const d = document.getElementById("play");
+                const value = (response.room.state === "playing") ? "Pause" : "Play"
+                d.textContent = value
+                console.log("User " + response.result.clientId + " " + response.room.state + " song to room " + response.room.id)
+            }
+            
+        }
+    </script>
+</body>
+</html>
