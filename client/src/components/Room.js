@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import useAuth from "../hooks/useAuth"
-import Player from "./Player"
+// import Player from "./Player"
+import CustomPlayer from "./CustomPlayer"
 import { Container, Form } from 'react-bootstrap'
 import SpotifyWebApi from 'spotify-web-api-node'
 import SearchResult from './SearchResult'
 import UserItem from './UserItem'
+import QueueItem from './QueueItem'
+
 import axios from 'axios'
 import io from 'socket.io-client'
 
@@ -45,7 +48,9 @@ export default function Room({ code }) {
     // music state
     const [search, setSearch] = useState("")
     const [searchResults, setSearchResults] = useState([])
+    const [queue, setQueue] = useState([])
     const [nowPlaying, setNowPlaying] = useState()
+    const [isPlaying, setIsPlaying] = useState(false)
     const [lyrics, setLyrics] = useState("")
 
     // social state
@@ -58,11 +63,37 @@ export default function Room({ code }) {
         setMessage("");
     };
 
+    // function chooseTrack(track){
+    //     setNowPlaying(track)
+    //     setSearch("")
+    //     setLyrics("")
+    // }
     function chooseTrack(track){
-        setNowPlaying(track)
-        setSearch("")
-        setLyrics("")
-    }
+        const payLoad = {
+            name: alias,
+            roomId: roomId,
+            track: track
+        }
+        socket.emit("add", payLoad);
+        setSearch("");
+    };
+
+    function handlePlay(){
+        const payLoad = {
+            name: alias,
+            roomId: roomId,
+        }
+        socket.emit("play", payLoad);
+    };
+
+    function handlePause(){
+        const payLoad = {
+            name: alias,
+            roomId: roomId,
+        }
+        socket.emit("pause", payLoad);
+    };
+
     useEffect(() => {
         // Socket Connections
         socket.on("connect", () => {
@@ -88,6 +119,7 @@ export default function Room({ code }) {
         })
         socket.on("joined", res => {
             setRoomId(res.room.id);
+            setQueue(res.room.queue);
         })
 
         // In-Room
@@ -99,8 +131,26 @@ export default function Room({ code }) {
             console.log("Users updated: ", res)
             setUsers(res)
         })
+
+        socket.on("updateQueue", res => {
+            console.log("Queue updated: ", res)
+            setQueue(res)
+        })
+
+        socket.on("playing", res => {
+            console.log("Player updated: ", res)
+            setIsPlaying(true)
+            setQueue(res.queue)
+            setNowPlaying(res.nowPlaying)
+        })
+
+        socket.on("paused", res => {
+            console.log("Player updated: ", res)
+            setIsPlaying(false)
+        })
     }, [])
 
+    // get lyrics
     useEffect(() => {
         if(!nowPlaying) return
         axios.get(process.env.REACT_APP_SERVER_HOST+":"+process.env.REACT_APP_SERVER_PORT+"/lyrics", {
@@ -142,17 +192,11 @@ export default function Room({ code }) {
         return () => (cancel = true)
     }, [search, accessToken])
 
-    return roomId? (
-    <Container className="d-flex flex-column py-2">
-        Connected to room: {roomId}
-        <div className="my-2">
-            {users.map(user => (
-                <UserItem
-                    user={user} 
-                    key={user.id}
-                />
-            ))}
-        </div>
+    return roomId? (<div>
+    {/* <Container className="d-flex flex-column py-2" style={{ height: "100vh" }}> */}
+    <div className ="d-flex flex-row">
+        <div className ="p-2">
+    <Container className="d-flex flex-column py-2" style={{ height: "100vh" }}>
         <Form.Control 
             type="search" 
             placeholder="Search Songs/Artists" 
@@ -177,12 +221,45 @@ export default function Room({ code }) {
             )}
         </div>
         <div>
-            <Player 
+            {/* <Player 
                 accessToken={accessToken} 
                 trackUri={nowPlaying?.uri}
+            /> */}
+            {nowPlaying?<QueueItem track={nowPlaying} />:<div></div>}
+            <CustomPlayer
+                handlePlay={handlePlay}
+                handlePause={handlePause}
+                isPlaying={isPlaying}
             />
         </div>
+        
     </Container>
+    </div>
+    <div className ="p-2">
+    Connected to room: {roomId}
+    
+    <div className="my-2">
+    Connected Users:
+        {users.map(user => (
+            <UserItem
+                user={user} 
+                key={user.id}
+            />
+        ))}
+    </div>
+    <div>Queue
+        {queue.map(track => (
+                <QueueItem
+                    track={track} 
+                    key={track.uri}
+                />
+            ))}
+    </div>
+    </div>
+    
+    </div>
+    
+    </div>
     ):(<Container>
         <input
             placeholder="Display Name" 

@@ -1,14 +1,17 @@
 import React from 'react'
 
 export default function SearchResult({track, chooseTrack}) {
-    function handlePlay(){
-        chooseTrack(track)
+    // function handlePlay(){
+    //     chooseTrack(track)
+    // }
+    function addQueue(){
+      chooseTrack(track)
     }
   return (
   <div 
     className="d-flex m-2 align-items-center" 
     style={{cursor:"pointer"}} 
-    onClick={handlePlay}
+    onClick={addQueue}
   >
       <img src={track.albumUrl} style={{height: '64px', width: '64px'}}/>
       <div className="ml-3">

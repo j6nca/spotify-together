@@ -73,6 +73,7 @@ app.listen(APP_PORT, () => console.log("Listening on ", APP_PORT))
 
 
 // Websocket stuff
+const Queue = require("./Queue.js")
 const { v4: uuidv4 } = require('uuid');
 const httpServer = http.createServer();
 const io = require("socket.io")(httpServer, {
@@ -86,15 +87,17 @@ const rooms={};
 httpServer.listen(SERVER_PORT, () => console.log("Listening on ", SERVER_PORT))
 io.on("connection", client => {
     console.log("Connected: ", client.id)
+    // room create
     client.on("create", alias => {
         console.log("Create: ", client.id)
         const roomId = genId2(5);
         rooms[roomId] = {
             "id": roomId,
-            "playing": "",
+            "nowPlaying": {},
             "users": [],
             "state": "paused",
-            "queue": []
+            "queue": [],
+            "messages": []
         }
         const payLoad = {
             "room": rooms[roomId],
@@ -103,6 +106,7 @@ io.on("connection", client => {
         io.in(client.id).emit("created", payLoad);
         console.log(payLoad)
     })
+    // room join
     client.on("join", req => {
         console.log("Join: ", req)
         const user = {
@@ -119,7 +123,10 @@ io.on("connection", client => {
         io.in(client.id).emit("joined", payLoad);
         io.in(req.roomId).emit("newUser", user);
         io.in(req.roomId).emit("users", Object.values(rooms[req.roomId].users))
+        // //TODO below not needed, just update receiving end to read values from payLoad
+        // io.in(client.id).emit("updateQueue", Object.values(rooms[req.roomId].queue))
     })
+    // room disconnect
     client.on("disconnect", () => {
         console.log("Disconnected: ", client.id)
         // const user = users[client.id]
@@ -143,6 +150,64 @@ io.on("connection", client => {
         }
         
     })
+
+    // chat sent
+    client.on("chat", req => {
+        console.log("Chat sent: ", req)
+        const message = {
+            name: req.name,
+            id: client.id,
+            content: req.message
+        }
+        
+        rooms[req.roomId].messages.push(message)
+        
+        io.in(req.roomId).emit("delivered", Object.values(rooms[req.roomId].messages))
+    })
+    // queue pause
+    client.on("pause", req => {
+        console.log("Requested Pause: ", req)
+        const state = "paused"
+        rooms[req.roomId].state = state
+        io.in(req.roomId).emit(state, state)
+    })
+    // queue play
+    client.on("play", req => {
+        console.log("Requested Play: ", req)
+        const state = "playing"
+        
+        if(Object.keys(rooms[req.roomId].nowPlaying).length === 0 && rooms[req.roomId].queue.length>0){
+            rooms[req.roomId].nowPlaying = rooms[req.roomId].queue.shift()
+            console.log(rooms[req.roomId].nowPlaying)
+            console.log(rooms[req.roomId].queue)
+        }
+        // if nowPlaying is null... tell server to pop the first track from the queue
+        if(Object.keys(rooms[req.roomId].nowPlaying).length === 0){
+            console.log("No songs to play!")
+        }else{
+            rooms[req.roomId].state = state
+        }
+        // updates to clients: nowPlaying, queue, isPlaying
+        io.in(req.roomId).emit(state, rooms[req.roomId])
+    })
+    // queue add
+    client.on("add", req => {
+        console.log("Song requested: ", req)
+        const track = {
+            albumUrl: req.track.albumUrl,
+            title: req.track.title,
+            artist: req.track.artist,
+            uri: req.track.uri
+        }
+        
+        rooms[req.roomId].queue.push(track)
+        
+        io.in(req.roomId).emit("updateQueue", Object.values(rooms[req.roomId].queue))
+    })
+    // queue remove
+    // queue skip
+    // song moveTo
+    
 })
 
 function genId(length){
